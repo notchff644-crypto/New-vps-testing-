@@ -25,8 +25,8 @@ from flask import Flask, jsonify
 #  ═══════════════════════════════════════════════════════════════
 # ================================================================
 
-BOT_TOKEN = "8764301541:AAGvFjYzPOcm47UaKeg1arNefqHanuQXbWc"
-OWNER_ID = "8373276191"
+BOT_TOKEN = "8764301541:AAGvFjYzPOcm47UaKeg1arNefqHanuQxbmc"
+OWNER_ID = 8373276191
 
 if not BOT_TOKEN:
     print("❌ BOT_TOKEN set karo!")
