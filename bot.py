@@ -23,7 +23,7 @@ from flask import Flask, jsonify
 #  CONFIG & UI GLYPHS
 # ================================================================
 
-BOT_TOKEN = "8764301541:AAGvFjYzPOcm47UaKeg1arNefqHanuQxbmc"
+BOT_TOKEN = "8764301541:AAGvFjYzPOcm47UaKeg1arNefqHanuQXbWc"
 OWNER_ID = 8373276191
 
 if not BOT_TOKEN:
