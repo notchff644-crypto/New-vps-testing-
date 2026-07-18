@@ -20,9 +20,7 @@ from telebot import types
 from flask import Flask, jsonify
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
 #  CONFIG & UI GLYPHS
-#  ═══════════════════════════════════════════════════════════════
 # ================================================================
 
 BOT_TOKEN = "8764301541:AAGvFjYzPOcm47UaKeg1arNefqHanuQxbmc"
@@ -45,7 +43,13 @@ for d in DIRS.values():
 DB_FILE = DIRS["data"] / "db.json"
 PORT = int(os.environ.get("PORT", 10000))
 
-# ── Glyphs (Smart Emojis + Symbols) ──
+# ================================================================
+#  ✅ BOT INSTANCE - YAHAN ADD KIYA
+# ================================================================
+
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
+
+# ── Glyphs ──
 G = {
     "ok": "✅", "no": "❌", "warn": "⚠️",
     "arrow": "➡️", "bullet": "•", "back": "◀️",
@@ -68,21 +72,16 @@ FOOTER = f"\n\n{BRAND}"
 PHOTOS: Dict[str, str] = {}
 
 def _build_photos():
-    """Generate simple banner images"""
     try:
         from PIL import Image, ImageDraw, ImageFont
     except:
         return
-    
     out_dir = DIRS["photos"]
     out_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Simple placeholder banners
     colors = {
         "main": "#1E1B4B", "admin": "#7C2D12", "bots": "#0E7490",
         "upload": "#4338CA", "profile": "#1E3A8A", "help": "#334155",
     }
-    
     for key, color in colors.items():
         out = out_dir / f"{key}.png"
         if out.exists():
@@ -92,7 +91,6 @@ def _build_photos():
             img = Image.new("RGB", (800, 300), color)
             draw = ImageDraw.Draw(img)
             draw.rectangle([(0, 270), (800, 300)], fill="#FFFFFF")
-            # Simple text
             try:
                 font = ImageFont.load_default()
                 draw.text((50, 50), f"✨ {key.upper()}", fill="#FFFFFF", font=font)
@@ -159,6 +157,8 @@ def notify_owner(text):
 #  BOT FUNCTIONS
 # ================================================================
 
+RUNNING: Dict[str, Dict] = {}
+
 def find_bot(bot_id):
     return db_load()["bots"].get(bot_id)
 
@@ -211,8 +211,6 @@ def install_deps(bot_dir, kind):
 #  SANDBOX RUNNER
 # ================================================================
 
-RUNNING: Dict[str, Dict] = {}
-
 def start_child(b):
     bid = b["_id"]
     bot_dir = Path(b["dir"])
@@ -227,6 +225,7 @@ def start_child(b):
     
     cmd = [sys.executable, "-u", entry] if kind == "python" else ["node", entry]
     env = {**os.environ, "HOME": str(bot_dir), "TMPDIR": str(bot_dir / "tmp")}
+    (bot_dir / "tmp").mkdir(exist_ok=True)
     
     try:
         proc = subprocess.Popen(cmd, cwd=str(bot_dir), env=env,
@@ -390,7 +389,7 @@ def gh_backup_now():
 
 def gh_auto_loop():
     while True:
-        time.sleep(21600)  # 6 hours
+        time.sleep(21600)
         if GITHUB_ENABLED:
             res = gh_backup_now()
             if res.get("ok"):
@@ -399,12 +398,9 @@ def gh_auto_loop():
                 print(f"[backup] failed: {res.get('error')}")
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
-#  KEYBOARDS (With Style/Colors)
-#  ═══════════════════════════════════════════════════════════════
+#  KEYBOARDS
 # ================================================================
 
-# ── Styled Button Class ──
 class Btn(types.InlineKeyboardButton):
     def __init__(self, *args, style: str = "", **kwargs):
         super().__init__(*args, **kwargs)
@@ -482,15 +478,12 @@ def photo_kb():
     return kb
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
-#  UI HELPERS (show_menu with photos)
-#  ═══════════════════════════════════════════════════════════════
+#  UI HELPERS
 # ================================================================
 
 _PHOTO_FILE_IDS: Dict[str, str] = {}
 
 def resolve_photo(ref):
-    """Get photo from cache or local file"""
     if _PHOTO_FILE_IDS.get(ref):
         return _PHOTO_FILE_IDS[ref]
     if ref in PHOTOS and PHOTOS[ref]:
@@ -508,12 +501,9 @@ def remember_photo(ref, msg):
         pass
 
 def show_menu(chat_id, photo_key, caption, kb=None, call=None):
-    """Show photo + caption + buttons"""
     photo = PHOTOS.get(photo_key, PHOTOS.get("main", ""))
-    
     if call and call.message:
         try:
-            # Try to edit existing message
             if photo:
                 bot.edit_message_media(
                     media=types.InputMediaPhoto(resolve_photo(photo_key) or photo,
@@ -525,15 +515,12 @@ def show_menu(chat_id, photo_key, caption, kb=None, call=None):
                 return
         except:
             pass
-        
         try:
             bot.edit_message_text(caption, chat_id, call.message.message_id,
                                  reply_markup=kb, parse_mode="HTML")
             return
         except:
             pass
-    
-    # Send new
     try:
         if photo:
             m = bot.send_photo(chat_id, resolve_photo(photo_key) or photo,
@@ -555,16 +542,13 @@ def show_text(chat_id, text, kb=None, call=None):
     bot.send_message(chat_id, text, reply_markup=kb, parse_mode="HTML")
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
 #  MENU RENDERS
-#  ═══════════════════════════════════════════════════════════════
 # ================================================================
 
 def render_main(chat_id, uid, call=None):
     u = get_user(uid) or {}
     bot_count = len(user_bots(uid))
     running = sum(1 for b in user_bots(uid) if b["_id"] in RUNNING and RUNNING[b["_id"]]["proc"].poll() is None)
-    
     caption = f"""
 <b>{BRAND}</b>
 {G['div']}
@@ -583,14 +567,12 @@ def render_my_bots(chat_id, uid, call=None):
         caption = f"🤖 <b>No bots uploaded yet!</b>\n\nUpload your first bot using Upload Bot."
         show_menu(chat_id, "bots", caption, back_kb("menu_main"), call)
         return
-    
     kb = types.InlineKeyboardMarkup()
     for b in bots:
         running = b["_id"] in RUNNING and RUNNING[b["_id"]]["proc"].poll() is None
         icon = G["running"] if running else G["stopped"]
         kb.add(Btn(f"{icon} {b.get('name', '?')}", callback_data=f"view_{b['_id']}", style="primary"))
     kb.add(Btn(f"{G['back']} Main Menu", callback_data="menu_main", style="primary"))
-    
     caption = f"🤖 <b>Your Bots</b> ({len(bots)})\n{G['div']}"
     show_menu(chat_id, "bots", caption, kb, call)
 
@@ -599,7 +581,6 @@ def render_bot_view(chat_id, bid, call=None):
     if not b:
         show_menu(chat_id, "bots", "❌ Bot not found.", back_kb("my_bots"), call)
         return
-    
     st = child_status(bid)
     caption = f"""
 <b>🤖 {b.get('name', '?')}</b>
@@ -649,21 +630,17 @@ Your account info
     show_menu(chat_id, "help", caption, back_kb("menu_main"), call)
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
 #  ADMIN RENDERS
-#  ═══════════════════════════════════════════════════════════════
 # ================================================================
 
 def render_admin(chat_id, uid, call=None):
     if not is_admin(uid):
         show_menu(chat_id, "admin", "❌ Admin only.", back_kb("menu_main"), call)
         return
-    
     d = db_load()
     bots = d.get("bots", {})
     running = sum(1 for bid in bots if bid in RUNNING and RUNNING[bid]["proc"].poll() is None)
     stopped = len(bots) - running
-    
     caption = f"""
 {G['shield']} <b>Admin Panel</b>
 {G['div']}
@@ -680,13 +657,11 @@ def render_adm_bots(chat_id, call=None):
     d = db_load()
     bots = list(d["bots"].values())
     running = sum(1 for b in bots if b["_id"] in RUNNING and RUNNING[b["_id"]]["proc"].poll() is None)
-    
     rows = []
     for b in bots[:30]:
         is_running = b["_id"] in RUNNING and RUNNING[b["_id"]]["proc"].poll() is None
         icon = G["running"] if is_running else G["stopped"]
         rows.append(f"{icon} {b.get('name', '?')} | Owner: {b.get('owner')}")
-    
     caption = f"""
 {G['stats']} <b>All Bots</b>
 {G['div']}
@@ -699,7 +674,6 @@ def render_adm_bots(chat_id, call=None):
         caption += "\n" + "\n".join(rows[:20])
     else:
         caption += "\nNo bots found."
-    
     kb = types.InlineKeyboardMarkup()
     kb.add(Btn(f"{G['refresh']} Refresh", callback_data="adm_bots", style="primary"))
     kb.add(Btn(f"{G['back']} Admin", callback_data="admin", style="primary"))
@@ -708,13 +682,11 @@ def render_adm_bots(chat_id, call=None):
 def render_adm_users(chat_id, call=None):
     d = db_load()
     users = list(d["users"].values())
-    
     rows = []
     for u in users[:30]:
         uid = str(u["id"])
         bc = sum(1 for b in d["bots"].values() if str(b.get("owner")) == uid)
         rows.append(f"👤 {u.get('name', '?')} | @{u.get('username', '—')} | ID: {uid} | Bots: {bc}")
-    
     caption = f"""
 {G['users']} <b>All Users</b>
 {G['div']}
@@ -722,7 +694,6 @@ def render_adm_users(chat_id, call=None):
 {G['div']}
 """
     caption += "\n".join(rows) if rows else "No users found."
-    
     kb = types.InlineKeyboardMarkup()
     kb.add(Btn(f"{G['refresh']} Refresh", callback_data="adm_users", style="primary"))
     kb.add(Btn(f"{G['back']} Admin", callback_data="admin", style="primary"))
@@ -736,7 +707,6 @@ def render_adm_ban(chat_id, call=None):
 Format:
 <code>ban USER_ID REASON</code>
 <code>unban USER_ID</code>
-
 Example:
 <code>ban 123456789 Spamming</code>
 """
@@ -761,7 +731,6 @@ Scans uploaded files for:
 • Bot tokens
 • System commands
 • Suspicious patterns
-
 ✅ Auto-scan enabled on upload.
 """
     show_menu(chat_id, "admin", caption, back_kb("admin"), call)
@@ -784,7 +753,6 @@ Auto backup every 6 hours.
     show_menu(chat_id, "admin", caption, kb, call)
 
 def render_adm_settings(chat_id, call=None):
-    d = db_load()
     caption = f"""
 {G['settings']} <b>Settings</b>
 {G['div']}
@@ -809,9 +777,7 @@ Send a photo after tapping.
     show_menu(chat_id, "admin", caption, photo_kb(), call)
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
 #  UPLOAD HANDLER
-#  ═══════════════════════════════════════════════════════════════
 # ================================================================
 
 USER_STATES: Dict[int, Dict] = {}
@@ -821,28 +787,22 @@ def handle_upload(m):
     doc = m.document
     if not doc:
         return
-    
     fname = doc.file_name or "bot.py"
-    
     try:
         f = bot.get_file(doc.file_id)
         raw = bot.download_file(f.file_path)
     except Exception as e:
         bot.reply_to(m, f"❌ Download failed: {e}")
         return
-    
-    # Security Scan
     scan = security_scan(raw)
     if not scan["safe"]:
         threats = "\n".join(scan["threats"])
         bot.reply_to(m, f"🚫 <b>Security Threat Detected!</b>\n\n{threats}\n\nFile blocked.", parse_mode="HTML")
         notify_owner(f"🚨 Security threat in {fname} from {uid}\n{threats}")
         return
-    
     bot_id = secrets.token_hex(8)
     bot_dir = DIRS["sandbox"] / f"{uid}_{bot_id}"
     bot_dir.mkdir(parents=True, exist_ok=True)
-    
     files_added = []
     if fname.endswith(".zip"):
         try:
@@ -863,32 +823,23 @@ def handle_upload(m):
     else:
         (bot_dir / fname).write_bytes(raw)
         files_added.append(fname)
-    
     name = Path(fname).stem[:30]
-    
-    # Limit: 3 bots free
     if len(user_bots(uid)) >= 3:
         bot.reply_to(m, "❌ Free plan: max 3 bots. Delete old ones first.")
         shutil.rmtree(bot_dir, ignore_errors=True)
         return
-    
     doc_db = {
         "_id": bot_id, "owner": uid, "name": name,
         "dir": str(bot_dir), "created": str(datetime.now(timezone.utc)),
         "files": files_added, "status": "stopped"
     }
-    
     save_bot(doc_db)
     notify_owner(f"📤 New bot: {name} by {uid}")
-    
     bot.reply_to(m, f"✅ <b>{name}</b> uploaded!\nBot ID: <code>{bot_id}</code>", parse_mode="HTML")
-    
     start_child(doc_db)
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
 #  ADMIN HANDLERS (Text)
-#  ═══════════════════════════════════════════════════════════════
 # ================================================================
 
 def handle_ban(m):
@@ -898,19 +849,16 @@ def handle_ban(m):
     if len(parts) < 2:
         bot.reply_to(m, "❌ Format: ban USER_ID REASON")
         return
-    
     op = parts[0].lower()
     try:
         uid = int(parts[1])
     except:
         bot.reply_to(m, "❌ Invalid user ID.")
         return
-    
     d = db_load()
     if str(uid) not in d["users"]:
         bot.reply_to(m, "❌ User not found.")
         return
-    
     if op == "ban":
         reason = " ".join(parts[2:]) or "No reason"
         d["users"][str(uid)]["banned"] = True
@@ -940,11 +888,9 @@ def handle_broadcast(m):
         return
     text = m.text.strip()
     USER_STATES.pop(m.chat.id, None)
-    
     if not text:
         bot.reply_to(m, "❌ Empty message.")
         return
-    
     d = db_load()
     sent = 0
     for uid, u in d["users"].items():
@@ -956,24 +902,18 @@ def handle_broadcast(m):
             time.sleep(0.05)
         except:
             pass
-    
     audit(m.from_user.id, "broadcast", f"sent={sent}")
     bot.reply_to(m, f"✅ Broadcast sent to {sent} users.")
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
-#  PHOTO REPLACE (Admin)
-#  ═══════════════════════════════════════════════════════════════
+#  PHOTO REPLACE
 # ================================================================
 
 def replace_menu_photo(key, file_bytes):
-    """Replace a menu photo"""
     if key not in ["main", "admin", "bots", "upload", "profile", "help"]:
         return False
-    
     out_dir = DIRS["photos"]
     out_dir.mkdir(parents=True, exist_ok=True)
-    
     out = out_dir / f"{key}.png"
     try:
         out.write_bytes(file_bytes)
@@ -984,9 +924,7 @@ def replace_menu_photo(key, file_bytes):
         return False
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
 #  FLASK KEEP-ALIVE
-#  ═══════════════════════════════════════════════════════════════
 # ================================================================
 
 app = Flask(__name__)
@@ -1003,9 +941,7 @@ def start_keepalive():
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=PORT, debug=False), daemon=True).start()
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
 #  COMMAND HANDLERS
-#  ═══════════════════════════════════════════════════════════════
 # ================================================================
 
 def is_private(m):
@@ -1038,12 +974,10 @@ def on_doc(m):
         return
     uid = m.from_user.id
     create_user(uid, m.from_user.first_name, m.from_user.username or "")
-    
     u = get_user(uid)
     if u and u.get("banned"):
         bot.reply_to(m, "🚫 You are banned.")
         return
-    
     handle_upload(m)
 
 @bot.message_handler(content_types=["photo"])
@@ -1051,7 +985,6 @@ def on_photo(m):
     if not is_private(m):
         return
     uid = m.from_user.id
-    
     st = USER_STATES.get(uid, {})
     if st.get("flow") == "await_photo" and is_admin(uid):
         key = st.get("photo_key")
@@ -1073,17 +1006,13 @@ def on_photo(m):
 def on_text(m):
     if not is_private(m):
         return
-    
     uid = m.from_user.id
     create_user(uid, m.from_user.first_name, m.from_user.username or "")
-    
     u = get_user(uid)
     if u and u.get("banned"):
         bot.reply_to(m, "🚫 You are banned.")
         return
-    
     state = USER_STATES.get(m.chat.id, {}).get("flow", "")
-    
     if state == "await_broadcast" and is_admin(uid):
         handle_broadcast(m)
         USER_STATES.pop(m.chat.id, None)
@@ -1092,9 +1021,7 @@ def on_text(m):
         USER_STATES.pop(m.chat.id, None)
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
 #  CALLBACK HANDLERS
-#  ═══════════════════════════════════════════════════════════════
 # ================================================================
 
 @bot.callback_query_handler(func=lambda c: True)
@@ -1102,43 +1029,29 @@ def cb_handler(call):
     uid = call.from_user.id
     chat_id = call.message.chat.id
     data = call.data
-    
     try:
         bot.answer_callback_query(call.id)
     except:
         pass
     
-    # ─── Main Menu ───
     if data == "menu_main":
         render_main(chat_id, uid, call)
         return
-    
-    # ─── My Bots ───
     if data == "my_bots":
         render_my_bots(chat_id, uid, call)
         return
-    
-    # ─── Upload ───
     if data == "upload":
         show_text(chat_id, "📤 Send your .py or .zip file now.", back_kb("menu_main"), call)
         return
-    
-    # ─── Profile ───
     if data == "profile":
         render_profile(chat_id, uid, call)
         return
-    
-    # ─── Help ───
     if data == "help":
         render_help(chat_id, call)
         return
-    
-    # ─── Admin ───
     if data == "admin":
         render_admin(chat_id, uid, call)
         return
-    
-    # ─── Admin Sub-menus ───
     if data == "adm_bots":
         render_adm_bots(chat_id, call)
         return
@@ -1164,7 +1077,6 @@ def cb_handler(call):
         render_adm_photos(chat_id, call)
         return
     
-    # ─── Photo Change ───
     if data.startswith("photo_"):
         key = data[6:]
         if is_admin(uid):
@@ -1174,7 +1086,6 @@ def cb_handler(call):
             show_text(chat_id, "❌ Admin only.", back_kb("admin"), call)
         return
     
-    # ─── Backup Now ───
     if data == "adm_backup_now":
         if not is_admin(uid):
             show_text(chat_id, "❌ Admin only.", back_kb("admin"), call)
@@ -1183,13 +1094,11 @@ def cb_handler(call):
         threading.Thread(target=lambda: do_backup(chat_id), daemon=True).start()
         return
     
-    # ─── Bot View ───
     if data.startswith("view_"):
         bid = data[5:]
         render_bot_view(chat_id, bid, call)
         return
     
-    # ─── Start ───
     if data.startswith("start_"):
         bid = data[6:]
         b = find_bot(bid)
@@ -1203,7 +1112,6 @@ def cb_handler(call):
             show_text(chat_id, "❌ Not yours.", back_kb("my_bots"), call)
         return
     
-    # ─── Stop ───
     if data.startswith("stop_"):
         bid = data[5:]
         b = find_bot(bid)
@@ -1214,7 +1122,6 @@ def cb_handler(call):
             show_text(chat_id, "❌ Not yours.", back_kb("my_bots"), call)
         return
     
-    # ─── Restart ───
     if data.startswith("restart_"):
         bid = data[8:]
         b = find_bot(bid)
@@ -1228,7 +1135,6 @@ def cb_handler(call):
             show_text(chat_id, "❌ Not yours.", back_kb("my_bots"), call)
         return
     
-    # ─── Logs ───
     if data.startswith("logs_"):
         bid = data[5:]
         b = find_bot(bid)
@@ -1241,7 +1147,6 @@ def cb_handler(call):
             show_text(chat_id, "❌ Not yours.", back_kb("my_bots"), call)
         return
     
-    # ─── Delete ───
     if data.startswith("delete_"):
         bid = data[7:]
         b = find_bot(bid)
@@ -1258,7 +1163,6 @@ def cb_handler(call):
             show_text(chat_id, "❌ Not yours.", back_kb("my_bots"), call)
         return
     
-    # ─── Unknown ───
     show_text(chat_id, "❓ Unknown option.", back_kb("menu_main"), call)
 
 def do_backup(chat_id):
@@ -1269,9 +1173,7 @@ def do_backup(chat_id):
         bot.send_message(chat_id, f"❌ Backup failed: {res.get('error')}")
 
 # ================================================================
-#  ═══════════════════════════════════════════════════════════════
 #  MAIN
-#  ═══════════════════════════════════════════════════════════════
 # ================================================================
 
 def banner():
@@ -1283,15 +1185,9 @@ def banner():
 
 def main():
     banner()
-    
-    # Start GitHub auto backup
     if GITHUB_ENABLED:
         threading.Thread(target=gh_auto_loop, daemon=True).start()
-    
-    # Start keepalive
     start_keepalive()
-    
-    # Set commands
     try:
         bot.set_my_commands([
             types.BotCommand("start", "Main menu"),
@@ -1301,10 +1197,7 @@ def main():
         ])
     except:
         pass
-    
-    # Notify owner
     notify_owner("✅ Bot started!")
-    
     print("[bot] polling...")
     while True:
         try:
